@@ -36,7 +36,7 @@ from utils import define_train_params
 from utils import handle_metrics, change_metrics_names
 from utils import dict2namespace, namespace2dict
 from utils import get_daug_scheme_path
-from utils import pairwise_loss, invariance_loss, weighted_loss, mean_loss
+from utils import pairwise_loss, invariance_loss, weighted_loss, triplet_loss, mean_loss
 from utils import handle_train_dir
 from utils import print_flags, write_flags, numpy_to_python
 from utils import print_test_results, write_test_results
@@ -440,6 +440,8 @@ def _model_setup(train_config, metrics, resume_training=None):
                    if 'daug_' in output_name]
     class_inv_outputs = [output_name for output_name in inv_outputs
                    if 'class_' in output_name]
+    triplet_inv_outputs = [output_name for output_name in inv_outputs
+                   if 'triplet_' in output_name]                   
     mean_inv_outputs = [output_name for output_name in inv_outputs
                    if 'mean_' in output_name]
     train_config.optimizer.n_inv_layers = len(daug_inv_outputs)
@@ -460,6 +462,7 @@ def _model_setup(train_config, metrics, resume_training=None):
                 train_config.optimizer.daug_invariance_params,
                 train_config.optimizer.n_inv_layers,
                 no_inv_layers)
+        triplet_inv_loss_weights = [0.5] # add for last layer
         class_inv_loss_weights = get_invariance_loss_weights(
                 train_config.optimizer.class_invariance_params,
                 train_config.optimizer.n_inv_layers,
@@ -483,6 +486,10 @@ def _model_setup(train_config, metrics, resume_training=None):
             {loss_weights_tensors.update(
                 {output: K.variable(weight, name='w_{}'.format(output))})
                 for output, weight
+                in zip(triplet_inv_outputs, triplet_inv_loss_weights)}
+            {loss_weights_tensors.update(
+                {output: K.variable(weight, name='w_{}'.format(output))})
+                for output, weight
                 in zip(mean_inv_outputs, mean_inv_loss_weights)}
             loss = {'softmax': weighted_loss(
                 train_config.optimizer.loss, loss_weights_tensors['softmax'])}
@@ -493,6 +500,9 @@ def _model_setup(train_config, metrics, resume_training=None):
                 invariance_loss, loss_weights_tensors[output])})
                 for output in class_inv_outputs}
             {loss.update({output: weighted_loss(
+                triplet_loss, loss_weights_tensors[output])})
+                for output in triplet_inv_outputs}
+            {loss.update({output: weighted_loss(
                 mean_loss, loss_weights_tensors[output])})
                 for output in mean_inv_outputs}
             loss_weights = [1.] * len(model.outputs)
@@ -502,6 +512,8 @@ def _model_setup(train_config, metrics, resume_training=None):
                     in daug_inv_outputs}
             {loss.update({output: invariance_loss}) for output
                     in class_inv_outputs}
+            {loss.update({output: triplet_loss}) for output
+                    in triplet_inv_outputs}
             {loss.update({output: mean_loss}) for output
                     in mean_inv_outputs}
             if 'output_inv' in model.outputs:
@@ -513,6 +525,9 @@ def _model_setup(train_config, metrics, resume_training=None):
             {loss_weights.update({output: loss_weight})
                 for output, loss_weight in zip(class_inv_outputs,
                                            class_inv_loss_weights)}
+            {loss_weights.update({output: loss_weight})
+                for output, loss_weight in zip(triplet_inv_outputs,
+                                           triplet_inv_loss_weights)}
             {loss_weights.update({output: loss_weight})
                 for output, loss_weight in zip(mean_inv_outputs,
                                            mean_inv_loss_weights)}
