@@ -29,12 +29,9 @@ from utils import get_daug_scheme_path
 from utils import pairwise_loss, mean_loss, invariance_loss, triplet_loss
 from activations import get_activations
 
-import keras.backend as K
-from keras.models import load_model
-import keras.losses
-keras.losses.pairwise_loss = pairwise_loss
-keras.losses.invariance_loss = invariance_loss
-keras.losses.mean_loss = mean_loss
+import tensorflow.compat.v1.keras.backend as K
+from tensorflow.compat.v1.keras.models import load_model
+import tensorflow.compat.v1.keras.losses
 
 import os
 import argparse
