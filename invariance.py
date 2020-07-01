@@ -26,7 +26,7 @@ from dask.diagnostics import ProgressBar
 
 from data_input import hdf52dask, get_generator, batch_generator
 from utils import get_daug_scheme_path
-from utils import pairwise_loss, mean_loss, invariance_loss
+from utils import pairwise_loss, mean_loss, invariance_loss, triplet_loss
 from activations import get_activations
 
 import keras.backend as K
