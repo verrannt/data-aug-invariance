@@ -129,8 +129,12 @@ def test(images_tt, labels_tt, images_tr, labels_tr, model, test_config,
     results_dict : dict
         Dictionary containing some performance metrics
     """
-    # Ensure the model has no MSE nodes and outputs
-    model = del_mse_nodes(model)
+    # Ensure the model has no MSE nodes and outputs by building a new model
+    # with the old models weights and only the softmax output
+    softmax_layers = [layer for layer in model.layers if layer.name=='softmax']
+    assert len(softmax_layers) == 1, 'Model has multiple softmax layers'
+    softmax_layer = softmax_layers[0]
+    model = Model(model.input, softmax_layer.output)
 
     results_dict = {}
     daug_params_dicts = {}
