@@ -190,6 +190,46 @@ def invariance_loss(y_true, y_pred):
     return (K.sum(y_rel * y_pred) / K.sum(y_rel)) / \
            (K.sum(y_all * y_pred) / K.sum(y_all))
 
+def triplet_loss(y_true, y_pred):
+
+    y_pred = y_pred[:, :, 0]
+    
+    # 3-D matrix of triplet distances
+    pred_i_and_j = tf.expand_dims(y_pred, 2)
+    pred_i_and_k = tf.expand_dims(y_pred, 1)
+    y_pred = tf.math.subtract(pred_i_and_j, pred_i_and_k)
+
+    # Rt
+    true_i_and_j = tf.expand_dims(y_true, 2)
+    true_i_and_k = tf.expand_dims(y_true, 1)
+    
+    # Rt for class invariance
+    class_true_i_and_j = true_i_and_j[:,:,:,1]
+    class_true_i_and_k = true_i_and_k[:,:,:,1]
+    class_Rt = tf.math.subtract(class_true_i_and_j, class_true_i_and_k)
+
+    # Rt for daug invariance
+    daug_Rt = tf.math.subtract(true_i_and_j[:,:,:,0], true_i_and_k[:,:,:,0])
+
+    # Uncomment the following if the daug or class labels should be scaled
+    #daug_Rt = tf.multiply(daug_Rt, 2)
+    #class_Rt = tf.multiply(class_Rt, 0.1)
+
+    # Compute the final Rt my adding the data augmented triplet
+    # labels to the class triplet labels, but masked so we only
+    # consider triplets where all elements are of the same class.
+    same_class_mask = tf.equal(
+        tf.cast(class_true_i_and_j, tf.bool), 
+        tf.cast(class_true_i_and_k, tf.bool))
+    daug_Rt = tf.cast(same_class_mask, tf.float32) * daug_Rt
+    
+    Rt = tf.add(class_Rt, daug_Rt)
+    loss = K.maximum(tf.multiply(Rt, y_pred + 1.0), 0.0)
+
+    n_valid_triplets = tf.reduce_sum(tf.abs(Rt))
+    loss = tf.reduce_sum(loss) / n_valid_triplets
+
+    return loss
 
 def weighted_loss(loss_function, weight):
     if loss_function == 'categorical_crossentropy':
