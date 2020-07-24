@@ -460,6 +460,22 @@ def _model_setup(train_config, metrics, resume_training=None):
                 'pairwise_loss': pairwise_loss,
                 'mean_loss': mean_loss
                 })
+
+        #x = model.get_layer('output_inv').output
+        #x = Dense(128, activation='relu', use_bias=True, 
+        #    kernel_initializer='he_normal', bias_initializer='zeros',
+        #    name='dense1')(x)
+        #x = BatchNormalization(name='bn_dense1')(x)
+        #x = Dense(256, activation='relu', use_bias=True, 
+        #    kernel_initializer='he_normal', bias_initializer='zeros',
+        #    name='dense2')(x)
+        #x = BatchNormalization(name='bn_dense2')(x)
+        #x = Dense(10, activation='linear', use_bias=True, 
+        #    kernel_initializer='he_normal', bias_initializer='zeros',
+        #    name='dense3')(x)
+        #x = Activation('softmax', name='softmax')(x)
+        #model = Model(model.input, x)
+
         train_config.train.initial_epoch = int(resume_training.split('_')[-1])
     else:
         model = _model_init(train_config)
