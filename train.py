@@ -476,6 +476,14 @@ def _model_setup(train_config, metrics, resume_training=None):
         #x = Activation('softmax', name='softmax')(x)
         #model = Model(model.input, x)
 
+        ## Freeze model weights except for classification layer
+        #for layer in model.layers:
+        #    if not 'logits' in layer.name and not 'dense' in layer.name:
+        #        print(layer.name, ': frozen')
+        #        layer.trainable = False
+        #    else:
+        #        print(layer.name, ': trainable')
+
         train_config.train.initial_epoch = int(resume_training.split('_')[-1])
     else:
         model = _model_init(train_config)
