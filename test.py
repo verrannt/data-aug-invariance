@@ -7,7 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 import dask.array as da
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow.compat.v1.keras.backend as K
 from tensorflow.compat.v1.keras.models import load_model
 from tensorflow.compat.v1.keras.models import Model
@@ -45,6 +45,10 @@ FLAGS = None
 
 def main(argv=None):
 
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    K.set_session(tf.Session(config=config))
+
     K.set_floatx('float32')
 
     print_flags(FLAGS)
@@ -58,7 +62,14 @@ def main(argv=None):
     test_config = prepare_test_config(test_config, FLAGS)
 
     # Load model
-    model = load_model(os.path.join(FLAGS.model))
+    model = load_model(
+        os.path.join(FLAGS.model), 
+        custom_objects = {
+            'invariance_loss': invariance_loss,
+            'triplet_loss': triplet_loss,
+            'pairwise_loss': pairwise_loss,
+            'mean_loss': mean_loss
+            })
 
     # Open HDF5 file containing the data set and get images and labels
     hdf5_file = h5py.File(FLAGS.data_file, 'r')

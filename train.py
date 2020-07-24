@@ -5,6 +5,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import tensorflow.compat.v1 as tf
 import tensorflow.compat.v1.keras.backend as K
 from tensorflow.compat.v1.keras.callbacks import LearningRateScheduler, TensorBoard, ModelCheckpoint
 ## NOTE: Here keras.utils.generic_utils was replaced with just keras.utils
@@ -12,18 +13,18 @@ from tensorflow.compat.v1.keras.utils import Progbar
 from tensorflow.compat.v1.keras.callbacks import ProgbarLogger
 from tensorflow.compat.v1.keras.models import load_model
 from tensorflow.compat.v1.keras.models import Model
+from tensorflow.compat.v1.keras.layers import Dense, Activation, BatchNormalization
 from tensorflow.compat.v1.keras.optimizers import SGD, Adam
 from tensorflow.compat.v1.keras.metrics import top_k_categorical_accuracy
+tf.disable_v2_behavior() # Disable eager execution behaviour
+
+from sklearn.svm import LinearSVC, SVC
 
 from functools import partial, update_wrapper
 
 import numpy as np
 import h5py
 import yaml
-
-import tensorflow.compat.v1 as tf
-# Disable eager execution behaviour
-tf.disable_v2_behavior()
 
 from data_input import dataset_characteristics, train_val_split
 from data_input import validation_image_params, get_generator
@@ -407,7 +408,14 @@ def train(images_tr, labels_tr, images_val, labels_val, model, model_cat,
 def _model_setup(train_config, metrics, resume_training=None):
 
     if resume_training:
-        model = load_model(os.path.join(resume_training))
+        model = load_model(
+            os.path.join(resume_training), 
+            custom_objects = {
+                'invariance_loss': invariance_loss,
+                'triplet_loss': triplet_loss,
+                'pairwise_loss': pairwise_loss,
+                'mean_loss': mean_loss
+                })
         train_config.train.initial_epoch = int(resume_training.split('_')[-1])
     else:
         model = _model_init(train_config)
@@ -548,9 +556,9 @@ def _model_setup(train_config, metrics, resume_training=None):
     # NOTE: This fails because model has no attribute metrics_names
     # in newer TF/Keras versions
     #model = change_metrics_names(model, train_config.optimizer.invariance)
-
-    if model_cat:
-        model_cat = change_metrics_names(model_cat, False)
+    #
+    #if model_cat:
+    #    model_cat = change_metrics_names(model_cat, False)
 
     return model, model_cat, loss_weights_tensors
 

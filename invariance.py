@@ -29,9 +29,16 @@ from utils import get_daug_scheme_path
 from utils import pairwise_loss, mean_loss, invariance_loss, triplet_loss
 from activations import get_activations
 
+import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import keras
 import tensorflow.compat.v1.keras.backend as K
 from tensorflow.compat.v1.keras.models import load_model
 import tensorflow.compat.v1.keras.losses
+
+# Disable eager execution, otherwise K.function will not work when passing
+# K.learning_phase() as input (see issue
+# https://github.com/tensorflow/tensorflow/issues/34201)
+tf.disable_eager_execution()
 
 import os
 import argparse
@@ -46,6 +53,10 @@ FLAGS = None
 
 
 def main(argv=None):
+
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    K.set_session(tf.Session(config=config))
 
 #     cluster = LocalCluster(dashboard_address=None)
 #     client = Client(cluster, memory_limit='{}GB'.format(FLAGS.memory_limit),
@@ -73,7 +84,14 @@ def main(argv=None):
 
     # Initialize the network model
     model_filename = FLAGS.model
-    model = load_model(model_filename)
+    model = load_model(
+        model_filename, 
+        custom_objects = {
+            'invariance_loss': invariance_loss,
+            'triplet_loss': triplet_loss,
+            'pairwise_loss': pairwise_loss,
+            'mean_loss': mean_loss
+            })
 
     # Print the model summary
     model.summary()
@@ -116,7 +134,14 @@ def main(argv=None):
         # Reload the model
         if layer_idx > 0:
             K.clear_session()
-            model = load_model(model_filename)
+            model = load_model(
+                model_filename, 
+                custom_objects = {
+                    'invariance_loss': invariance_loss,
+                    'triplet_loss': triplet_loss,
+                    'pairwise_loss': pairwise_loss,
+                    'mean_loss': mean_loss
+                    })
 
         layer = model.get_layer(layer_name)
 
