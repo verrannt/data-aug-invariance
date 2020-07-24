@@ -29,7 +29,7 @@ from surgery import ablate_activations, del_mse_nodes, del_extra_nodes
 from surgery import network2dict, restore_nodes
 
 from utils import print_flags
-from utils import pairwise_loss, invariance_loss, mean_loss
+from utils import pairwise_loss, invariance_loss, mean_loss, triplet_loss
 from utils import handle_metrics
 from utils import prepare_test_config, numpy_to_python
 from utils import print_test_results, write_test_results

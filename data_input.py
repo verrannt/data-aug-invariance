@@ -107,7 +107,7 @@ def get_generator(images, **dict_params):
 
 
 def generate_batches(image_gen, images, labels, batch_size, aug_per_im, shuffle, 
-                     seed=None, n_inv_layers=0):
+                     seed=None, n_inv_layers=0, uses_triplet_loss=False):
     for batch in image_gen.flow_dask(images, labels,
                                      batch_size=batch_size,
                                      aug_per_im=aug_per_im,
@@ -117,18 +117,31 @@ def generate_batches(image_gen, images, labels, batch_size, aug_per_im, shuffle,
             # The list of targets for the invariance outputs are:
             # [daug_invariance_target, class_invariance_target, mean: ones]
             # for each invariance layer
+            invariance_targets = []
+
             bs = batch[0].shape[0]
             class_inv_y = np.dot(batch[1][0], batch[1][0].T)
             ones = np.ones([bs, bs], dtype=np.uint8)
             tril = np.tril_indices(bs)
             class_inv_y[tril] = 0
             ones[tril] = 0
+
             daug_inv_y = np.stack([batch[1][1], class_inv_y], axis=2)
+            invariance_targets.append(daug_inv_y)
+
             class_inv_y = np.stack([class_inv_y, ones], axis=2)
-            invariance_targets = [daug_inv_y, 
-                                  class_inv_y,
-                                  np.ones(batch[0].shape[0], dtype=np.uint8)] \
-                                 * n_inv_layers
+            invariance_targets.append(class_inv_y)
+
+            if uses_triplet_loss:
+                # append the daug inputs another time since it contains
+                # both class and daug labels needed for the triplet loss
+                invariance_targets.append(daug_inv_y)
+
+            mean_inv_y = np.ones(batch[0].shape[0], dtype=np.uint8)
+            invariance_targets.append(mean_inv_y)
+
+            invariance_targets *= n_inv_layers
+
             yield (batch[0],
                    [batch[1][0]] + invariance_targets)
         else:

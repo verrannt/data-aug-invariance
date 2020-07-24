@@ -490,6 +490,12 @@ def prepare_train_config(train_config, flags):
         train_config['network']['batch_norm'] = True
     if flags.no_batch_norm:
         train_config['network']['batch_norm'] = False
+    train_config['triplet_loss'] = flags.triplet_loss
+    if flags.svc_score_every:
+        train_config['svc_score'] = True
+        train_config['svc_score_freq'] = flags.svc_score_every
+    else:
+        train_config['svc_score'] = False
 
     # Set simulation parameters
     if flags.simulate_norep_samples:

@@ -229,14 +229,16 @@ def train(images_tr, labels_tr, images_val, labels_val, model, model_cat,
             train_config.train.batch_size.gen_tr,
             aug_per_im=train_config.daug.aug_per_img_tr, shuffle=True,
             seed=train_config.seeds.batch_shuffle,
-            n_inv_layers=train_config.optimizer.n_inv_layers)
+            n_inv_layers=train_config.optimizer.n_inv_layers,
+            use_triplet_inputs=train_config.triplet_loss)
     image_gen_val = get_generator(images_val,
                                   **train_config.daug.daug_params_val)
     batch_gen_val = generate_batches(
             image_gen_val, images_val, labels_val,
             train_config.train.batch_size.gen_val,
             aug_per_im=train_config.daug.aug_per_img_val, shuffle=False,
-            n_inv_layers=train_config.optimizer.n_inv_layers)
+            n_inv_layers=train_config.optimizer.n_inv_layers,
+            use_triplet_inputs=train_config.triplet_loss)
     if FLAGS.no_val:
         batch_gen_val = None
 
@@ -454,6 +456,12 @@ def _model_setup(train_config, metrics, resume_training=None):
                    if 'mean_' in output_name]
     train_config.optimizer.n_inv_layers = len(daug_inv_outputs)
 
+    if not triplet_inv_outputs and train_config.triplet_loss:
+        raise NotImplementedError("You are trying to train "
+            "with a triplet loss, but the model you specified has no triplet "
+            "invariance layer implemented. Omit the triplet_loss flag or "
+            "choose a model with such a layer.")
+
     if train_config.optimizer.invariance:
         # Determine loss weights for each invariance loss at each layer
         assert train_config.optimizer.daug_invariance_params['pct_loss'] +\
@@ -466,18 +474,31 @@ def _model_setup(train_config, metrics, resume_training=None):
             no_inv_layers.append(0)
         if FLAGS.no_inv_layers:
             no_inv_layers = [int(layer) - 1 for layer in FLAGS.no_inv_layers]
-        daug_inv_loss_weights = get_invariance_loss_weights(
+            
+        if train_config.triplet_loss:
+            triplet_inv_loss_weights = get_invariance_loss_weights(
                 train_config.optimizer.daug_invariance_params,
                 train_config.optimizer.n_inv_layers,
                 no_inv_layers)
-        triplet_inv_loss_weights = [0.5] # add for last layer
-        class_inv_loss_weights = get_invariance_loss_weights(
-                train_config.optimizer.class_invariance_params,
-                train_config.optimizer.n_inv_layers,
-                no_inv_layers)
+            daug_inv_loss_weights = np.zeros(
+                train_config.optimizer.n_inv_layers)
+            class_inv_loss_weights = np.zeros(
+                train_config.optimizer.n_inv_layers)
+            loss_weight_cat = 1.0 - (np.sum(triplet_inv_loss_weights))
+        else:
+            triplet_inv_loss_weights = np.zeros(
+                train_config.optimizer.n_inv_layers)
+            daug_inv_loss_weights = get_invariance_loss_weights(
+                    train_config.optimizer.daug_invariance_params,
+                    train_config.optimizer.n_inv_layers,
+                    no_inv_layers)
+            class_inv_loss_weights = get_invariance_loss_weights(
+                    train_config.optimizer.class_invariance_params,
+                    train_config.optimizer.n_inv_layers,
+                    no_inv_layers)
+            loss_weight_cat = 1.0 - (np.sum(daug_inv_loss_weights) + \
+                                     np.sum(class_inv_loss_weights))
         mean_inv_loss_weights = np.zeros(len(mean_inv_outputs))
-        loss_weight_cat = 1.0 - (np.sum(daug_inv_loss_weights) + \
-                                 np.sum(class_inv_loss_weights))
 
         if 'decay_rate' in train_config.optimizer.daug_invariance_params or \
            'decay_rate' in train_config.optimizer.class_invariance_params:
@@ -1200,6 +1221,10 @@ if __name__ == '__main__':
         dest='no_val',
         help='Disable validation after each epoch'
     )
-
+    parser.add_argument(
+        '--triplet_loss',
+        action='store_true',
+        help='Enable the triplet loss for networks that support it'
+    )
     FLAGS, unparsed = parser.parse_known_args()
     main()
