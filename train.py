@@ -388,6 +388,48 @@ def train(images_tr, labels_tr, images_val, labels_val, model, model_cat,
             for callback in callbacks.values():
                 callback.on_epoch_end(epoch)
 
+            if train_config.svc_score and \
+               (epoch+1) % train_config.svc_score_freq == 0:
+                
+                randidx = np.random.choice(images_val.shape[0], 1000)
+                
+                # This assumes the model has layers containing 'output_inv'
+                # in their name which output the embeddings
+                
+                
+                output_inv = [outp for outp in model.outputs 
+                    if 'output_inv' in outp.name]
+                
+                if output_inv:
+                    # Build embedding model with only the invariance output
+                    # as output layer
+                    output_inv = output_inv[-1] # take only last layer
+                    emb_model = Model(model.inputs, output_inv)
+
+                    train_x = emb_model.predict_on_batch(
+                        images_tr.compute()[randidx])
+                    train_y = labels_tr.compute()[randidx]
+                    train_y_svc = np.argmax(train_y, axis=1)
+                    
+                    test_x = emb_model.predict_on_batch(
+                        images_val.compute()[randidx])
+                    test_y = labels_val.compute()[randidx]
+                    test_y_svc = np.argmax(test_y, axis=1)
+                    
+                    #svc = LinearSVC(max_iter=5000)
+                    #svc.fit(train_x, train_y)
+                    #score_lin = svc.score(test_x, test_y)
+
+                    svm = SVC(gamma='scale', max_iter=5000)
+                    svm.fit(train_x, train_y_svc)
+                    score = svm.score(test_x, test_y_svc)
+
+                    print("\nSVC test score at epoch {}: {}".format(epoch+1, score))
+                else:
+                    raise ValueError(
+                        "You are trying to compute an SVC score on "
+                        "the embedding layer(s) matching 'output_inv', but the "
+                        "model contains no such layer(s).")
         history = None
     else:
         history = model.fit_generator(
@@ -1234,6 +1276,13 @@ if __name__ == '__main__':
         '--triplet_loss',
         action='store_true',
         help='Enable the triplet loss for networks that support it'
+    )
+    parser.add_argument(
+        '--svc_score_every',
+        type=int,
+        default=0,
+        help='Train a Support-Vector-Classifier on the model embeddings '
+            'every x epochs.'
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()
