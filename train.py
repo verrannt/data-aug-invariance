@@ -660,6 +660,15 @@ def _model_init(train_config):
                     weight_decay=train_config.network.reg.weight_decay,
                     batch_norm=train_config.network.batch_norm,
                     invariance=train_config.optimizer.invariance)
+    elif train_config.network.name == 'tripletcnn':
+        model = networks.tripletcnn(
+                    train_config.data.image_shape, 
+                    train_config.data.n_classes,
+                    dropout=train_config.network.reg.dropout,
+                    weight_decay=train_config.network.reg.weight_decay,
+                    batch_norm=train_config.network.batch_norm,
+                    use_triplet_loss=train_config.triplet_loss,
+                    use_inv_outputs=train_config.optimizer.invariance)
     else:
         raise(NotImplementedError('Network name not implemented'))
 
