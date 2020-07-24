@@ -1463,6 +1463,207 @@ def khonsu(image_shape, n_classes, dropout=0., weight_decay=None,
 
         return [model_inv, model_cat]
 
+def tripletcnn(image_shape, n_classes, dropout=0., weight_decay=None,
+           batch_norm=False, use_triplet_loss=True, use_inv_outputs=True):
+    """
+    A shallow convolutional neural network with triplet loss at the last layer.
+
+    Parameters
+    ----------
+    image_shape : int list
+        Shape of the input images
+
+    n_classes : int
+        Number of classes in the training data set
+
+    dropout : float
+        The drop rate for Dropout after the convolutional layers.
+
+    weight_decay : float
+        L2 factor for the weight decay regularization or None
+
+    batch_norm : bool
+        If True, batch normalization is added after every convolutional layer
+
+    invariance : bool
+        If True, a matrix of squared pairwise distances will be computed with
+        the activations of each convoltional layer (after ReLU) and appended as
+        output of the model.
+
+    Returns
+    -------
+    model : Model
+        Keras model describing the architecture
+    """
+
+    def conv_layer(x, filters, kernel, stride, padding, n_layer):
+        """
+        Defines a convolutional block, formed by a convolutional layer, an
+        optional batch normalization layer and a ReLU activation.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input to the convolutional layer
+
+        filters : int
+            Number of filters (width) of the convolutional layer
+
+        kernel : int
+            Kernel size
+
+        stride : int
+            Stride of the convolution
+
+        n_layer : int
+            Layer number, with respect to the whole network
+        
+        Returns
+        -------
+        x : Tensor
+            Output of the convolutional block
+        """
+        # Convolution
+        x = Conv2D(filters=filters,
+                   kernel_size=(kernel, kernel),
+                   strides=(stride, stride),
+                   padding=padding,
+                   activation='linear',   
+                   use_bias=False,
+                   kernel_initializer='he_normal',
+                   kernel_regularizer=l2reg(weight_decay),   
+                   input_shape=image_shape,
+                   name='conv{}'.format(n_layer))(x)
+        
+        # Batch Normalization
+        if batch_norm:
+            x = BatchNormalization(axis=3, 
+                                   epsilon=1.001e-5,
+                                   gamma_regularizer=l2reg(weight_decay),
+                                   beta_regularizer=l2reg(weight_decay),
+                                   name='conv{}bn'.format(n_layer))(x)
+
+        # ReLU Activation
+        x = Activation('relu', name='conv{}relu'.format(n_layer))(x)    
+
+        return x
+
+    def fc_layer(x, units, n_layer):
+        """
+        Defines a fully connected block, formed by a fully connected layer, an
+        optional batch normalization layer and a ReLU activation.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input to the convolutional layer
+
+        units : int
+            Number of neurons in the layer
+
+        n_layer : int
+            Layer number, with respect to the whole network
+        
+        Returns
+        -------
+        x : Tensor
+            Output of the convolutional block
+        """
+        # Fully connected layer
+        x = Dense(units=units, 
+                  activation='linear', 
+                  use_bias=True, 
+                  kernel_initializer='he_normal', 
+                  bias_initializer='zeros',
+                  name='fc{}'.format(n_layer))(x)
+        
+        # Batch Normalization
+        if batch_norm:
+            x = BatchNormalization(axis=1, 
+                                   epsilon=1.001e-5,
+                                   gamma_regularizer=l2reg(weight_decay),
+                                   beta_regularizer=l2reg(weight_decay),
+                                   name='fc{}bn'.format(n_layer))(x)
+
+        # ReLU Activation
+        x = Activation('relu', name='fc{}relu'.format(n_layer))(x)    
+
+        return x
+
+    inputs = Input(shape=image_shape, name='input')
+
+    # Conv. layer: 100 filters, stride 2
+    x = conv_layer(
+        inputs, filters=100, kernel=3, stride=2, padding='same', n_layer=1)
+    if dropout > 0.: x = Dropout(rate=dropout, name='dropout1')(x)
+
+    # Conv. layer: 75 filters, stride 2
+    x = conv_layer(x, filters=75, kernel=3, stride=2, padding='same', n_layer=2)
+    if dropout > 0.: x = Dropout(rate=dropout, name='dropout2')(x)
+
+    # Conv. layer: 50 filters, stride 2
+    x = conv_layer(x, filters=50, kernel=3, stride=2, padding='same', n_layer=3)
+    if dropout > 0.: x = Dropout(rate=dropout, name='dropout3')(x)
+
+    # Conv. layer: 25 filters, stride 2
+    x = conv_layer(x, filters=25, kernel=3, stride=2, padding='same', n_layer=4)
+    if dropout > 0.: x = Dropout(rate=dropout, name='dropout4')(x)
+
+    # Flatten
+    x = Flatten(name='flatten')(x)
+    x = fc_layer(x, n_classes, n_layer=5)
+    output_inv = Lambda(lambda x: x, name='output_inv')(x)
+
+    outputs = []
+
+    # Invariance layers
+    if use_inv_outputs:
+        outputs.append(output_inv)
+
+        mse = Lambda(pairwise_mse, name='pairwise_mse')(output_inv)
+        
+        daug_inv = Lambda(
+            lambda x: K.tile(K.expand_dims(x, axis=2), (1, 1, 2)),
+            name='daug_inv')(mse)
+
+        class_inv = Lambda(
+            lambda x: K.tile(K.expand_dims(x, axis=2), (1, 1, 2)),
+            name='class_inv')(mse)
+        
+        if use_triplet_loss:
+            triplet_inv = Lambda(
+                lambda x: K.tile(K.expand_dims(x, axis=2), (1, 1, 2)),
+                name='triplet_inv')(mse)
+        
+        mean_inv = Lambda(
+            lambda x: K.expand_dims(K.mean(x, axis=1)),
+            name='mean_inv')(mse)
+
+    # Logits / Fully-connected
+    logits = Dense(
+        n_classes, activation='linear', use_bias=True, 
+        kernel_initializer='he_normal', bias_initializer='zeros',
+        name='logits')(output_inv)
+
+    # Output / Softmax
+    predictions = Activation('softmax', name='softmax')(logits)
+
+    outputs.append(predictions)
+    if use_inv_outputs:
+        outputs.append(daug_inv)
+        outputs.append(class_inv)
+        if use_triplet_loss:
+            outputs.append(triplet_inv)
+        outputs.append(mean_inv)
+
+    # Make model
+    model_inv = Model(
+        inputs=inputs, 
+        outputs=outputs,
+        name='model_inv')
+
+    return model_inv
+
 
 def pairwise_mse(x):
     # See https://stackoverflow.com/a/37040451
